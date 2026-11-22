@@ -127,6 +127,8 @@ Apphub is one of a small set of separate, GPL-3.0 tools:
 - [Swarf](https://github.com/matthewjaybarr-png/swarf): G-code editor setup for Neovim
 - [Crib](https://github.com/matthewjaybarr-png/crib): tool book editor and machine-side viewer
   for CNC shops. It writes an announce file, so it shows up in Apphub by itself.
+- [Jig](https://github.com/matthewjaybarr-png/jig): set-up sheets for CNC programs, one sheet per
+  program, with PDF and HTML offline copies
 
 ## Licence
 
