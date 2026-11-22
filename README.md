@@ -14,6 +14,14 @@ It starts empty: no apps, no catalog, nothing blocked. Built with [Tauri 2](http
 Get the Linux AppImage or `.deb`, or the Windows setup, from the
 [Releases](../../releases) page. There is no macOS build yet.
 
+On Arch Linux, build a package from the release `.deb` with the PKGBUILD in
+[packaging/aur](packaging/aur/PKGBUILD) (it checks the download's SHA256):
+
+```bash
+curl -O https://raw.githubusercontent.com/matthewjaybarr-png/apphub/main/packaging/aur/PKGBUILD
+makepkg -si
+```
+
 The Windows setup is not code-signed (signing costs money), so Windows SmartScreen will warn
 the first time. Click **More info**, then **Run anyway**.
 

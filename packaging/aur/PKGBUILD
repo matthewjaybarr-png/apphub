@@ -1,0 +1,17 @@
+# Maintainer: matthewjaybarr-png <267730639+matthewjaybarr-png@users.noreply.github.com>
+pkgname=apphub-bin
+pkgver=0.1.1
+pkgrel=1
+pkgdesc="Small desktop hub that finds, opens and updates your apps, with SHA256-checked installs from a shared folder"
+arch=('x86_64')
+url="https://github.com/matthewjaybarr-png/apphub"
+license=('GPL-3.0-or-later')
+depends=('webkit2gtk-4.1' 'gtk3')
+provides=('apphub')
+conflicts=('apphub')
+source=("https://github.com/matthewjaybarr-png/apphub/releases/download/v${pkgver}/Apphub_${pkgver}_amd64.deb")
+sha256sums=('42cbef8a91d4ade049c7bd4a2337837847abdbc7c5108163f9e59606b83f135b')
+
+package() {
+  bsdtar -xf data.tar.gz -C "$pkgdir"
+}
