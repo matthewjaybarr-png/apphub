@@ -120,6 +120,12 @@ npm run dev          # run with live reload
 npm run build        # AppImage/deb on Linux, NSIS setup on Windows
 ```
 
+## Related apps
+
+Apphub is one of a small set of separate, GPL-3.0 tools:
+
+- [Swarf](https://github.com/matthewjaybarr-png/swarf): G-code editor setup for Neovim
+
 ## Licence
 
-MIT. See [LICENSE](LICENSE).
+GPL-3.0-or-later, see [LICENSE](LICENSE). Copyright (C) 2026 the Apphub contributors.
