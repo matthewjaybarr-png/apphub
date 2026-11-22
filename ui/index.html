@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apphub</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <img id="logo" src="logo.png" alt="" width="48" height="48">
+  <div><h1>Apphub</h1><p>Your apps in one place</p></div>
+  <button id="refresh" type="button" title="Look for the apps again">Refresh</button>
+</header>
+<p id="error" role="alert"></p>
+<main id="apps" aria-live="polite"></main>
+<p id="empty" hidden>No apps yet. Add one below: type its name as it shows in your app menu, or give the full path to its program.</p>
+<p id="message" role="status"></p>
+
+<section class="panel">
+  <h2 id="form-title">Add an app</h2>
+  <form id="app-form">
+    <label>Name <input id="f-name" required maxlength="64" autocomplete="off"></label>
+    <label>Program (optional, full path) <input id="f-program" autocomplete="off" placeholder="Leave empty to find it"></label>
+    <label>Works with (optional, comma-separated) <input id="f-with" autocomplete="off"></label>
+    <div class="row"><button type="submit" id="f-save">Add</button> <button type="button" id="f-cancel" hidden>Cancel</button></div>
+  </form>
+</section>
+
+<details class="panel" id="options">
+  <summary>Options</summary>
+  <form id="catalog-form">
+    <label>Catalog folder (one subfolder per app, each with a latest.json; empty = none)
+      <input id="o-catalog" autocomplete="off"></label>
+    <div class="row"><button type="submit">Save catalog folder</button></div>
+  </form>
+  <p id="catalog-notes" class="dim"></p>
+  <form id="blocked-form">
+    <label>Blocked folders and drives, one per line (never opened or installed from)
+      <textarea id="o-blocked" rows="3" placeholder="/mnt/share&#10;S:"></textarea></label>
+    <div class="row"><button type="submit">Save blocked list</button></div>
+  </form>
+  <p class="dim">Settings folder: <span id="config"></span></p>
+</details>
+<script src="app.js"></script>
+</body>
+</html>
