@@ -125,6 +125,8 @@ npm run build        # AppImage/deb on Linux, NSIS setup on Windows
 Apphub is one of a small set of separate, GPL-3.0 tools:
 
 - [Swarf](https://github.com/matthewjaybarr-png/swarf): G-code editor setup for Neovim
+- [Crib](https://github.com/matthewjaybarr-png/crib): tool book editor and machine-side viewer
+  for CNC shops. It writes an announce file, so it shows up in Apphub by itself.
 
 ## Licence
 
