@@ -434,6 +434,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(windows))] // .desktop launchers are Linux-only; "/opt/..." is not a full path on Windows
     fn linux_launchers() {
         let e = desktop_entry("[Desktop Entry]\nType=Application\nName=Notes\nName[de]=X\nComment=Notes 2.1.0 (abc123)\nExec=\"/opt/notes/Notes.AppImage\" %F\n[Desktop Action new]\nName=New\n").unwrap();
         assert_eq!((e.name.as_str(), e.version.as_str()), ("Notes", "2.1.0"));
