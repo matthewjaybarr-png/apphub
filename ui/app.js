@@ -64,6 +64,12 @@ function card(row, names) {
   status.className = `status ${row.status}`;
   status.textContent = STATUS[row.status](row);
   el.append(h, status);
+  if (row.auto) {
+    const found = document.createElement("div");
+    found.className = "dim";
+    found.textContent = "Found by itself";
+    el.append(found);
+  }
   if (row.works_with.length) {
     const works = document.createElement("div");
     works.className = "works";

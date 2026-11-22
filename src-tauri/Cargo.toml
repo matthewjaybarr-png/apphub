@@ -1,5 +1,6 @@
 [package]
 name = "apphub"
+license = "MIT"
 version = "0.1.0"
 description = "Apphub - your desktop apps in one window"
 edition = "2021"

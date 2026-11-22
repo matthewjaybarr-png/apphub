@@ -1,21 +1,40 @@
 # Apphub
 
-A small desktop hub that keeps your apps in one place. You add the apps you want on the
-list; Apphub finds where each one is installed, shows its version, opens it, notes which apps
-work together, and can install or update apps from a catalog folder you choose.
+![Apphub with four apps: two installed, one with an update, one not found](docs/screenshot.png)
+
+A small desktop hub that keeps your apps in one place. Apps show up on the list by themselves;
+Apphub finds where each one is installed, shows its version, opens it, notes which apps work
+together, and can install or update apps from a catalog folder you choose.
 
 It starts empty: no apps, no catalog, nothing blocked. Built with [Tauri 2](https://tauri.app)
 (Rust and plain HTML/JS). Runs on Linux and Windows.
 
-## Adding an app
+## Download
 
-Give it a **name** (as it shows in your app menu), and optionally:
+Get the Linux AppImage or `.deb`, or the Windows setup, from the
+[Releases](../../releases) page. There is no macOS build yet.
+
+The Windows setup is not code-signed (signing costs money), so Windows SmartScreen will warn
+the first time. Click **More info**, then **Run anyway**.
+
+## How apps get on the list
+
+Nothing has to be typed in. An app shows up by itself when:
+
+- it writes an **announce file** (see below), which also gives its version, program and the
+  apps it works with, or
+- it is in your **catalog** folder, so you can install it from the card.
+
+**Remove** takes an app off the list and keeps it off, even if it would be found again. It does
+not uninstall anything. Adding it again by name brings it back.
+
+## Adding an app by hand
+
+For an app that does neither, give it a **name** (as it shows in your app menu), and optionally:
 
 - **Program**: the full path to its program. Leave it empty to let Apphub find it.
 - **Works with**: other app names, comma-separated. A name that is not on your list is shown
   struck through.
-
-**Remove** only takes an app off the list. It does not uninstall anything.
 
 ## How an app is found
 
@@ -39,9 +58,12 @@ An app can tell Apphub where it is by writing this file each time it starts:
   "app": "Notes",
   "version": "2.1.0",
   "exe": "/opt/notes/notes",
-  "seen_at": "2026-11-22T09:30:00Z"
+  "seen_at": "2026-11-22T09:30:00Z",
+  "works_with": ["Sketchpad"]
 }
 ```
+
+`works_with` is optional. If you set **Works with** yourself, yours is used instead.
 
 Apphub writes one for itself at startup.
 
@@ -97,3 +119,7 @@ cd src-tauri && cargo test
 npm run dev          # run with live reload
 npm run build        # AppImage/deb on Linux, NSIS setup on Windows
 ```
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).

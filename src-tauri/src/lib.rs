@@ -13,6 +13,8 @@ struct Row {
     works_with: Vec<String>,
     /// "chosen" (program picked by the user), "announced" (announce file), "installed" (launcher), "missing", "damaged"
     status: &'static str,
+    /// Found by itself (announce file or catalog), not added by the user.
+    auto: bool,
     version: String,
     seen_at: String,
     note: String,
@@ -36,6 +38,10 @@ fn change(app: &tauri::AppHandle, f: impl FnOnce(&mut Settings) -> Result<(), St
     let (path, mut s) = settings(app)?;
     f(&mut s)?;
     apps::save(&path, &s)
+}
+
+fn names(entries: &[(PathBuf, catalog::Latest)]) -> Vec<String> {
+    entries.iter().map(|(_, l)| l.app.trim().to_string()).collect()
 }
 
 fn read_catalog(s: &Settings) -> (Vec<(PathBuf, catalog::Latest)>, Vec<String>) {
@@ -63,9 +69,9 @@ fn list_apps(app: tauri::AppHandle) -> Result<Vec<Row>, String> {
     let (_, s) = settings(&app)?;
     let announce = config_dir(&app)?.join("apps");
     let (entries, _) = read_catalog(&s);
-    Ok(apps::find(&s, Some(&announce))
+    Ok(apps::find(&s, Some(&announce), &names(&entries))
         .into_iter()
-        .map(|(a, state)| {
+        .map(|(a, auto, state)| {
             let can_open = state.program().is_some();
             let (status, version, seen_at, note) = match state {
                 State::Chosen(_) => ("chosen", String::new(), String::new(), String::new()),
@@ -76,7 +82,7 @@ fn list_apps(app: tauri::AppHandle) -> Result<Vec<Row>, String> {
             };
             let installed = (status != "missing").then_some(version.as_str());
             let offer = catalog::pick(&a.name, &entries).map(|(dir, l)| catalog::offer(installed, dir, l, &s.blocked));
-            Row { name: a.name.clone(), program: a.program.clone(), works_with: a.works_with.clone(), status, version, seen_at, note, can_open, offer }
+            Row { name: a.name, program: a.program, works_with: a.works_with, status, auto, version, seen_at, note, can_open, offer }
         })
         .collect())
 }
@@ -87,7 +93,7 @@ fn save_app(app: tauri::AppHandle, name: String, program: String, works_with: Ve
     change(&app, |s| apps::upsert(s, &name, &program, &works_with))
 }
 
-/// Takes an app off the list (it stays installed).
+/// Takes an app off the list and keeps it off (it stays installed).
 #[tauri::command]
 fn remove_app(app: tauri::AppHandle, name: String) -> Result<(), String> {
     change(&app, |s| if apps::remove(s, &name) { Ok(()) } else { Err(format!("{name} is not on the list.")) })
@@ -98,10 +104,11 @@ fn remove_app(app: tauri::AppHandle, name: String) -> Result<(), String> {
 fn open_app(app: tauri::AppHandle, name: String) -> Result<(), String> {
     let (_, s) = settings(&app)?;
     let announce = config_dir(&app)?.join("apps");
-    let exe = apps::find(&s, Some(&announce))
+    let (entries, _) = read_catalog(&s);
+    let exe = apps::find(&s, Some(&announce), &names(&entries))
         .into_iter()
-        .find(|(a, _)| a.name == name)
-        .and_then(|(_, state)| state.program().map(PathBuf::from))
+        .find(|(a, _, _)| a.name == name)
+        .and_then(|(_, _, state)| state.program().map(PathBuf::from))
         .ok_or(format!("No program found for {name}. Set its program path."))?;
     let mut command = std::process::Command::new(&exe);
     if let Some(dir) = exe.parent() {
@@ -116,10 +123,11 @@ fn open_app(app: tauri::AppHandle, name: String) -> Result<(), String> {
 #[tauri::command]
 fn install_app(app: tauri::AppHandle, name: String) -> Result<String, String> {
     let (_, s) = settings(&app)?;
-    if !s.apps.iter().any(|a| a.name == name) {
+    let (entries, _) = read_catalog(&s);
+    let announce = config_dir(&app)?.join("apps");
+    if !apps::list(&s, Some(&announce), &names(&entries)).iter().any(|(a, _)| a.name == name) {
         return Err(format!("{name} is not on the list."));
     }
-    let (entries, _) = read_catalog(&s);
     let (dir, latest) = catalog::pick(&name, &entries).ok_or(format!("{name} is not in the catalog."))?;
     let setup = catalog::setup_path(dir, latest, &s.blocked)?;
     let copy = catalog::fetch(&setup, &latest.sha256, &std::env::temp_dir().join("Apphub setups"))?;

@@ -1,6 +1,7 @@
 //! The user's app list and how each app on it is found.
 //!
-//! The list starts empty: the user adds apps by name. For each app the hub looks, in order, at
+//! The list starts empty. Apps show up by themselves when they write an announce file or are in
+//! the catalog; the user can also add any app by name. For each app the hub looks, in order, at
 //! the program the user picked, the app's announce file in `<config>/apps/<name>.json` (written
 //! by apps that want to be found), then the app's launcher: a `.desktop` file in
 //! ~/.local/share/applications on Linux, its uninstall entry under HKCU on Windows (read-only).
@@ -30,6 +31,8 @@ pub struct Settings {
     pub blocked: Vec<String>,
     /// Folder with one subfolder per app, each with a latest.json; empty means none.
     pub catalog: String,
+    /// Found-by-itself apps the user removed, so they stay off the list.
+    pub hidden: Vec<String>,
 }
 
 /// The saved settings; a missing file is a fresh start. A damaged file is an error, so the
@@ -97,6 +100,7 @@ pub fn upsert(settings: &mut Settings, name: &str, program: &str, works_with: &[
             with.push(w.to_string());
         }
     }
+    settings.hidden.retain(|h| !h.eq_ignore_ascii_case(&name));
     let entry = AppEntry { name, program, works_with: with };
     match settings.apps.iter_mut().find(|a| a.name.eq_ignore_ascii_case(&entry.name)) {
         Some(a) => *a = entry,
@@ -105,10 +109,16 @@ pub fn upsert(settings: &mut Settings, name: &str, program: &str, works_with: &[
     Ok(())
 }
 
+/// Takes the app off the list and keeps it off, even if it would be found by itself again.
 pub fn remove(settings: &mut Settings, name: &str) -> bool {
+    let name = name.trim();
     let before = settings.apps.len();
-    settings.apps.retain(|a| !a.name.eq_ignore_ascii_case(name.trim()));
-    settings.apps.len() != before
+    settings.apps.retain(|a| !a.name.eq_ignore_ascii_case(name));
+    let was_hidden = settings.hidden.iter().any(|h| h.eq_ignore_ascii_case(name));
+    if !was_hidden && !name.is_empty() {
+        settings.hidden.push(name.to_string());
+    }
+    settings.apps.len() != before || !was_hidden
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, PartialEq)]
@@ -119,6 +129,8 @@ pub struct Announce {
     pub version: String,
     pub exe: String,
     pub seen_at: String,
+    /// Optional: names of the apps it works with.
+    pub works_with: Vec<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -167,7 +179,7 @@ fn iso(time: SystemTime) -> String {
 
 /// Writes (only) the hub's own announce file, so apps can see the hub is installed.
 pub fn announce_self(folder: &Path, exe: &Path, now: SystemTime) -> Result<(), String> {
-    let a = Announce { schema_version: 1, app: HUB.into(), version: env!("CARGO_PKG_VERSION").into(), exe: exe.display().to_string(), seen_at: iso(now) };
+    let a = Announce { schema_version: 1, app: HUB.into(), version: env!("CARGO_PKG_VERSION").into(), exe: exe.display().to_string(), seen_at: iso(now), works_with: vec![] };
     write_json(&announce_file(folder, HUB), &serde_json::to_string_pretty(&a).map_err(|e| e.to_string())?)
 }
 
@@ -239,14 +251,49 @@ pub fn desktop_entry(text: &str) -> Option<Entry> {
     Some(Entry { name: name?, version, exe })
 }
 
+fn read_announce(folder: &Path, name: &str) -> Option<Announce> {
+    let text = std::fs::read_to_string(announce_file(folder, name)).ok()?;
+    serde_json::from_str(text.trim_start_matches('\u{feff}')).ok()
+}
+
+/// The list as shown: the saved apps, then every app with an announce file, then every app in
+/// `catalog` (names from the catalog), minus the hidden ones and the hub itself. An app with no
+/// "works with" set by the user takes the one from its announce file. The bool is "found by itself".
+pub fn list(settings: &Settings, folder: Option<&Path>, catalog: &[String]) -> Vec<(AppEntry, bool)> {
+    let mut found: Vec<String> = folder
+        .and_then(|f| std::fs::read_dir(f).ok())
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.file_name().to_str()?.strip_suffix(".json").map(str::to_string))
+        .collect();
+    found.sort();
+    found.extend(catalog.iter().cloned());
+    let mut apps: Vec<(AppEntry, bool)> = settings.apps.iter().map(|a| (a.clone(), false)).collect();
+    for name in found {
+        let skip = check_name(&name).is_err()
+            || name.eq_ignore_ascii_case(HUB)
+            || settings.hidden.iter().any(|h| h.eq_ignore_ascii_case(&name))
+            || apps.iter().any(|(a, _)| a.name.eq_ignore_ascii_case(&name));
+        if !skip {
+            apps.push((AppEntry { name, ..AppEntry::default() }, true));
+        }
+    }
+    for (app, _) in apps.iter_mut().filter(|(a, _)| a.works_with.is_empty()) {
+        if let Some(a) = folder.and_then(|f| read_announce(f, &app.name)) {
+            app.works_with = a.works_with.into_iter().map(|w| w.trim().to_string()).filter(|w| !w.is_empty() && !w.eq_ignore_ascii_case(&app.name)).collect();
+        }
+    }
+    apps
+}
+
 /// Every app on the list and its state, read now (nothing is cached).
-pub fn find<'a>(settings: &'a Settings, folder: Option<&Path>) -> Vec<(&'a AppEntry, State)> {
+pub fn find(settings: &Settings, folder: Option<&Path>, catalog: &[String]) -> Vec<(AppEntry, bool, State)> {
     let entries = native::entries();
     let usable = |p: &Path| !blocked(p, &settings.blocked) && p.exists();
-    settings
-        .apps
-        .iter()
-        .map(|app| {
+    list(settings, folder, catalog)
+        .into_iter()
+        .map(|(app, auto)| {
             let chosen = Some(PathBuf::from(&app.program)).filter(|p| !app.program.is_empty() && usable(p));
             let state = match chosen {
                 Some(p) => State::Chosen(p),
@@ -255,7 +302,7 @@ pub fn find<'a>(settings: &'a Settings, folder: Option<&Path>) -> Vec<(&'a AppEn
                     look(folder, &app.name, registered, usable)
                 }
             };
-            (app, state)
+            (app, auto, state)
         })
         .collect()
 }
@@ -368,6 +415,9 @@ mod tests {
         assert!(upsert(&mut s, "Paint", "relative/path", &[]).is_err());
         assert!(remove(&mut s, " NOTES"));
         assert!(!remove(&mut s, "Notes"));
+        assert_eq!(s.hidden, ["NOTES"]);
+        upsert(&mut s, "notes", "", &[]).unwrap();
+        assert!(s.hidden.is_empty(), "adding it again un-hides it");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -432,9 +482,9 @@ mod tests {
         std::fs::write(&program, "").unwrap();
         let mut s = Settings::default();
         upsert(&mut s, "Notes", &program.display().to_string(), &[]).unwrap();
-        assert_eq!(find(&s, Some(&dir))[0].1, State::Chosen(program.clone()));
+        assert_eq!(find(&s, Some(&dir), &[])[0].2, State::Chosen(program.clone()));
         s.blocked = vec![dir.display().to_string()];
-        assert_ne!(find(&s, Some(&dir))[0].1, State::Chosen(program));
+        assert_ne!(find(&s, Some(&dir), &[])[0].2, State::Chosen(program));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -446,6 +496,22 @@ mod tests {
         assert_eq!(names, ["Apphub.json"]);
         let back: Announce = serde_json::from_str(&std::fs::read_to_string(dir.join("Apphub.json")).unwrap()).unwrap();
         assert_eq!((back.app.as_str(), back.schema_version), ("Apphub", 1));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn apps_show_up_by_themselves() {
+        let dir = temp("list");
+        announce_self(&dir, Path::new("/opt/apphub/apphub"), UNIX_EPOCH).unwrap();
+        std::fs::write(dir.join("Notes.json"), r#"{"app":"Notes","exe":"/x","works_with":["Paint"," ","Notes"]}"#).unwrap();
+        std::fs::write(dir.join("notes.txt"), "").unwrap();
+        let mut s = Settings::default();
+        let names = |s: &Settings| list(s, Some(&dir), &["paint".into(), "NOTES".into(), "../bad".into()]).into_iter().map(|(a, auto)| (a.name, a.works_with, auto)).collect::<Vec<_>>();
+        assert_eq!(names(&s), [("Notes".into(), vec!["Paint".to_string()], true), ("paint".into(), vec![], true)]);
+        // a saved app keeps its own works-with; a removed one stays off
+        upsert(&mut s, "Notes", "", &["Calendar".into()]).unwrap();
+        remove(&mut s, "Paint");
+        assert_eq!(names(&s), [("Notes".into(), vec!["Calendar".to_string()], false)]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
